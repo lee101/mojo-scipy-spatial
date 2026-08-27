@@ -1,14 +1,11 @@
 """Compute kernels for KD-tree search and planar computational geometry."""
 
-from std.algorithm import parallelize
 from std.math import abs
 from std.sys.info import simd_width_of
 
 comptime FPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
 comptime IPtr = UnsafePointer[Int64, AnyOrigin[mut=True]]
 comptime W = simd_width_of[DType.float64]()
-comptime PARALLEL_QUERY_THRESHOLD = 256
-comptime PARALLEL_GEOMETRY_THRESHOLD = 1024
 
 
 def squared_distance(points: FPtr, point_index: Int, query: FPtr, d: Int) -> Float64:
@@ -118,11 +115,8 @@ def msp_kdtree_query(
                 query_stack[stack_size] = Int64(near)
                 stack_size += 1
 
-    if m >= PARALLEL_QUERY_THRESHOLD:
-        parallelize[process_query](m)
-    else:
-        for q in range(m):
-            process_query(q)
+    for q in range(m):
+        process_query(q)
 
 
 @export("msp_kdtree_query_radius")
@@ -194,11 +188,8 @@ def msp_kdtree_query_radius(
                 stack_size += 1
         counts[q] = Int64(count)
 
-    if m >= PARALLEL_QUERY_THRESHOLD:
-        parallelize[process_query](m)
-    else:
-        for q in range(m):
-            process_query(q)
+    for q in range(m):
+        process_query(q)
 
 
 def cross(points: FPtr, a: Int, b: Int, c: Int) -> Float64:
@@ -461,11 +452,8 @@ def msp_circumcenters_2d(
             aa * (cx - bx) + bb * (ax - cx) + cc * (bx - ax)
         ) / denominator
 
-    if count >= PARALLEL_GEOMETRY_THRESHOLD:
-        parallelize[process_triangle](count)
-    else:
-        for t in range(count):
-            process_triangle(t)
+    for t in range(count):
+        process_triangle(t)
 
 
 @export("msp_delaunay_transforms_2d")
@@ -503,8 +491,5 @@ def msp_delaunay_transforms_2d(
         transforms[base + 4] = cx
         transforms[base + 5] = cy
 
-    if count >= PARALLEL_GEOMETRY_THRESHOLD:
-        parallelize[process_triangle](count)
-    else:
-        for t in range(count):
-            process_triangle(t)
+    for t in range(count):
+        process_triangle(t)
