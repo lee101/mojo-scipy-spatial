@@ -95,11 +95,11 @@ best of five runs.
 
 | Case | mojo-scipy-spatial | SciPy | Relative |
 |---|---:|---:|---:|
-| KDTree.query k=4 (100k data, 20k query, 3D) | 11.6 ms | 50.2 ms | 4.31x faster |
-| KDTree.query_ball_point (50k data, 2k query, 3D) | 994.3 us | 7.5 ms | 7.55x faster |
-| ConvexHull construction (250k points, 2D) | 110.4 ms | 42.4 ms | 2.60x slower |
-| Delaunay construction (2k points, 2D) | 27.9 ms | 12.8 ms | 2.19x slower |
-| Voronoi construction (1.5k points, 2D) | 73.9 ms | 11.1 ms | 6.64x slower |
+| KDTree.query k=4 (100k data, 20k query, 3D) | 15.3 ms | 47.6 ms | 3.12x faster |
+| KDTree.query_ball_point (50k data, 2k query, 3D) | 666.2 us | 7.1 ms | 10.64x faster |
+| ConvexHull construction (250k points, 2D) | 98.8 ms | 37.9 ms | 2.61x slower |
+| Delaunay construction (2k points, 2D) | 21.9 ms | 7.6 ms | 2.90x slower |
+| Voronoi construction (1.5k points, 2D) | 34.5 ms | 8.6 ms | 4.00x slower |
 
 The KD-tree query kernels are faster than SciPy for these large batches.
 SciPy's Qhull-backed planar geometry remains faster than this port's

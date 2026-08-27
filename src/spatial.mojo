@@ -1,11 +1,14 @@
 """Compute kernels for KD-tree search and planar computational geometry."""
 
+from max.algorithm import parallelize
 from std.math import abs
-from std.sys.info import simd_width_of
+from std.sys.info import simd_width_of as simdwidthof
 
 comptime FPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
 comptime IPtr = UnsafePointer[Int64, AnyOrigin[mut=True]]
-comptime W = simd_width_of[DType.float64]()
+comptime W = simdwidthof[DType.float64]()
+comptime PARALLEL_QUERY_THRESHOLD = 256
+comptime PARALLEL_WORKERS = 36
 
 
 def squared_distance(points: FPtr, point_index: Int, query: FPtr, d: Int) -> Float64:
@@ -82,9 +85,15 @@ def msp_kdtree_query(
     def process_query(q: Int):
         var result_distances = distances + q * k
         var result_indices = indices + q * k
-        for rank in range(k):
+        var rank = 0
+        while rank + W <= k:
+            result_distances.store(rank, SIMD[DType.float64, W](upper2))
+            result_indices.store(rank, SIMD[DType.int64, W](Int64(n)))
+            rank += W
+        while rank < k:
             result_distances[rank] = upper2
             result_indices[rank] = Int64(n)
+            rank += 1
 
         var query_stack = stack + q * stack_stride
         var stack_size = 1
@@ -115,8 +124,11 @@ def msp_kdtree_query(
                 query_stack[stack_size] = Int64(near)
                 stack_size += 1
 
-    for q in range(m):
-        process_query(q)
+    if m >= PARALLEL_QUERY_THRESHOLD:
+        parallelize[process_query](m, min(m, PARALLEL_WORKERS))
+    else:
+        for q in range(m):
+            process_query(q)
 
 
 @export("msp_kdtree_query_radius")
@@ -188,8 +200,11 @@ def msp_kdtree_query_radius(
                 stack_size += 1
         counts[q] = Int64(count)
 
-    for q in range(m):
-        process_query(q)
+    if m >= PARALLEL_QUERY_THRESHOLD:
+        parallelize[process_query](m, min(m, PARALLEL_WORKERS))
+    else:
+        for q in range(m):
+            process_query(q)
 
 
 def cross(points: FPtr, a: Int, b: Int, c: Int) -> Float64:

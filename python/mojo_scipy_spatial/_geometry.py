@@ -38,14 +38,16 @@ class ConvexHull:
         self.min_bound = np.min(self.points, axis=0)
         self.max_bound = np.max(self.points, axis=0)
         order = np.lexsort((self.points[:, 1], self.points[:, 0]))
-        unique = np.ones(len(order), dtype=bool)
         previous = order[:-1]
         current = order[1:]
-        unique[1:] = (
+        duplicates = ~(
             (self.points[current, 0] != self.points[previous, 0])
             | (self.points[current, 1] != self.points[previous, 1])
         )
-        order = np.ascontiguousarray(order[unique], dtype=np.int64)
+        if np.any(duplicates):
+            unique = np.ones(len(order), dtype=bool)
+            unique[1:] = ~duplicates
+            order = np.ascontiguousarray(order[unique], dtype=np.int64)
         if len(order) < 3:
             raise QhullError("not enough unique points for a two-dimensional hull")
         work = np.empty(2 * len(order), dtype=np.int64)
@@ -278,37 +280,45 @@ class Voronoi:
             triangulation.nsimplex,
         )
         scale = max(float((self.max_bound - self.min_bound).max()), 1.0)
-        vertex_map = np.empty(triangulation.nsimplex, dtype=np.int64)
-        unique_vertices = []
         tolerance = np.finfo(float).eps * scale * 64
-        cells: dict[tuple[int, int], list[int]] = {}
-        for raw_index, center in enumerate(raw_vertices):
-            mapped = -1
-            cell = (
-                int(math.floor(center[0] / tolerance)),
-                int(math.floor(center[1] / tolerance)),
-            )
-            for dx in (-1, 0, 1):
-                for dy in (-1, 0, 1):
-                    for unique_index in cells.get(
-                        (cell[0] + dx, cell[1] + dy), ()
-                    ):
-                        if (
-                            np.linalg.norm(center - unique_vertices[unique_index])
-                            <= tolerance
+        x_order = np.argsort(raw_vertices[:, 0])
+        sorted_x = raw_vertices[x_order, 0]
+        if np.all(np.diff(sorted_x) > tolerance):
+            self.vertices = raw_vertices
+            vertex_map = np.arange(triangulation.nsimplex, dtype=np.int64)
+        else:
+            vertex_map = np.empty(triangulation.nsimplex, dtype=np.int64)
+            unique_vertices = []
+            cells: dict[tuple[int, int], list[int]] = {}
+            for raw_index, center in enumerate(raw_vertices):
+                mapped = -1
+                cell = (
+                    int(math.floor(center[0] / tolerance)),
+                    int(math.floor(center[1] / tolerance)),
+                )
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        for unique_index in cells.get(
+                            (cell[0] + dx, cell[1] + dy), ()
                         ):
-                            mapped = unique_index
+                            if (
+                                np.linalg.norm(
+                                    center - unique_vertices[unique_index]
+                                )
+                                <= tolerance
+                            ):
+                                mapped = unique_index
+                                break
+                        if mapped >= 0:
                             break
                     if mapped >= 0:
                         break
-                if mapped >= 0:
-                    break
-            if mapped < 0:
-                mapped = len(unique_vertices)
-                unique_vertices.append(center)
-                cells.setdefault(cell, []).append(mapped)
-            vertex_map[raw_index] = mapped
-        self.vertices = np.asarray(unique_vertices, dtype=np.float64)
+                if mapped < 0:
+                    mapped = len(unique_vertices)
+                    unique_vertices.append(center)
+                    cells.setdefault(cell, []).append(mapped)
+                vertex_map[raw_index] = mapped
+            self.vertices = np.asarray(unique_vertices, dtype=np.float64)
 
         opposite_edges = np.stack(
             (
