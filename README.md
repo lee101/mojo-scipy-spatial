@@ -117,6 +117,15 @@ integers. Each Mojo entry point reconstructs mutable typed pointers with
 `AnyOrigin[mut=True]`; Python retains ownership of every input, output, and
 scratch allocation.
 
+Both KD-tree entry points are single-threaded. Mojo 1.2 removed closure capture,
+so the 1.1.0 per-query fan-out is no longer expressible inside a `parallelize`
+body. A k-nearest-neighbour walk is also about as memory-bound as numeric code
+gets: each visited node costs four random `int64` node fields plus a random
+point row for roughly three flops per coordinate, on the order of 0.2
+flops/byte, and the traversal is a dependent pointer chase the prefetcher cannot
+see through. Delaunay, convex hull, and circumcentre kernels are inherently
+sequential or negligible in size.
+
 Points use C-contiguous row-major `float64` arrays. Tree indices, child links,
 triangle topology, and output indices use contiguous `int64` arrays. KD-tree
 nodes are stored in flat parallel arrays and searched with caller-owned stack

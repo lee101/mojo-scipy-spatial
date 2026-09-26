@@ -23,8 +23,6 @@ _SIGNATURES = {
 }
 
 _library = None
-_runtime = None
-_cpu_device = None
 
 
 def build() -> str:
@@ -37,31 +35,16 @@ def build() -> str:
 
 
 def lib() -> ctypes.CDLL:
-    global _library, _runtime, _cpu_device
+    global _library
     if _library is None:
         if not os.path.exists(LIBRARY):
             build()
         library = ctypes.CDLL(LIBRARY)
-        try:
-            runtime = ctypes.CDLL("libKGENCompilerRTShared.so")
-        except OSError:
-            prefix = os.environ.get("CONDA_PREFIX", "")
-            runtime = ctypes.CDLL(
-                os.path.join(prefix, "lib", "libKGENCompilerRTShared.so")
-            )
-        initialize = runtime.KGEN_CompilerRT_AsyncRT_GetOrCreateCPUDevice
-        initialize.argtypes = []
-        initialize.restype = ctypes.c_void_p
-        cpu_device = initialize()
-        if not cpu_device:
-            raise RuntimeError("Mojo runtime failed to create a CPU device")
         for name, (argtypes, restype) in _SIGNATURES.items():
             function = getattr(library, name)
             function.argtypes = argtypes
             function.restype = restype
         _library = library
-        _runtime = runtime
-        _cpu_device = cpu_device
     return _library
 
 

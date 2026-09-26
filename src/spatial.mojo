@@ -1,14 +1,11 @@
 """Compute kernels for KD-tree search and planar computational geometry."""
 
-from max.algorithm import parallelize
 from std.math import abs
 from std.sys.info import simd_width_of as simdwidthof
 
 comptime FPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
 comptime IPtr = UnsafePointer[Int64, AnyOrigin[mut=True]]
 comptime W = simdwidthof[DType.float64]()
-comptime PARALLEL_QUERY_THRESHOLD = 256
-comptime PARALLEL_WORKERS = 36
 
 
 def squared_distance(points: FPtr, point_index: Int, query: FPtr, d: Int) -> Float64:
@@ -81,8 +78,47 @@ def msp_kdtree_query(
     var upper2 = upper_bound * upper_bound
     var approximation = (1.0 + eps) * (1.0 + eps)
 
-    @parameter
-    def process_query(q: Int):
+    kdtree_query_rows(
+        points,
+        queries,
+        point_index,
+        axes,
+        left,
+        right,
+        stack,
+        distances,
+        indices,
+        0,
+        m,
+        n,
+        d,
+        k,
+        stack_stride,
+        upper2,
+        approximation,
+    )
+
+
+def kdtree_query_rows(
+    points: FPtr,
+    queries: FPtr,
+    point_index: IPtr,
+    axes: IPtr,
+    left: IPtr,
+    right: IPtr,
+    stack: IPtr,
+    distances: FPtr,
+    indices: IPtr,
+    q0: Int,
+    q1: Int,
+    n: Int,
+    d: Int,
+    k: Int,
+    stack_stride: Int,
+    upper2: Float64,
+    approximation: Float64,
+):
+    for q in range(q0, q1):
         var result_distances = distances + q * k
         var result_indices = indices + q * k
         var rank = 0
@@ -124,11 +160,66 @@ def msp_kdtree_query(
                 query_stack[stack_size] = Int64(near)
                 stack_size += 1
 
-    if m >= PARALLEL_QUERY_THRESHOLD:
-        parallelize[process_query](m, min(m, PARALLEL_WORKERS))
-    else:
-        for q in range(m):
-            process_query(q)
+
+
+
+
+def kdtree_radius_rows(
+    points: FPtr,
+    queries: FPtr,
+    point_index: IPtr,
+    axes: IPtr,
+    left: IPtr,
+    right: IPtr,
+    stack: IPtr,
+    counts: IPtr,
+    radii: FPtr,
+    offsets: IPtr,
+    indices: IPtr,
+    q0: Int,
+    q1: Int,
+    n: Int,
+    d: Int,
+    stack_stride: Int,
+    write_indices: Int,
+):
+    for q in range(q0, q1):
+        var count = 0
+        var radius = radii[q]
+        if radius < 0.0:
+            counts[q] = 0
+            continue
+        var radius2 = radius * radius
+        var query_stack = stack + q * stack_stride
+        var stack_size = 1
+        query_stack[0] = Int64(0)
+        var query = queries + q * d
+        while stack_size > 0:
+            stack_size -= 1
+            var node = Int(query_stack[stack_size])
+            if node < 0:
+                continue
+            var data_index = Int(point_index[node])
+            if squared_distance(points, data_index, query, d) <= radius2:
+                if write_indices != 0:
+                    indices[Int(offsets[q]) + count] = Int64(data_index)
+                count += 1
+
+            var axis = Int(axes[node])
+            var delta = query[axis] - points[data_index * d + axis]
+            var near = Int(left[node])
+            var far = Int(right[node])
+            if delta > 0.0:
+                near = Int(right[node])
+                far = Int(left[node])
+            if far >= 0 and delta * delta <= radius2:
+                query_stack[stack_size] = Int64(far)
+                stack_size += 1
+            if near >= 0:
+                query_stack[stack_size] = Int64(near)
+                stack_size += 1
+        counts[q] = Int64(count)
+
 
 
 @export("msp_kdtree_query_radius")
@@ -162,49 +253,25 @@ def msp_kdtree_query_radius(
     var offsets = IPtr(unsafe_from_address=offsets_addr)
     var indices = IPtr(unsafe_from_address=indices_addr)
 
-    @parameter
-    def process_query(q: Int):
-        var count = 0
-        var radius = radii[q]
-        if radius < 0.0:
-            counts[q] = 0
-            return
-        var radius2 = radius * radius
-        var query_stack = stack + q * stack_stride
-        var stack_size = 1
-        query_stack[0] = Int64(0)
-        var query = queries + q * d
-        while stack_size > 0:
-            stack_size -= 1
-            var node = Int(query_stack[stack_size])
-            if node < 0:
-                continue
-            var data_index = Int(point_index[node])
-            if squared_distance(points, data_index, query, d) <= radius2:
-                if write_indices != 0:
-                    indices[Int(offsets[q]) + count] = Int64(data_index)
-                count += 1
-
-            var axis = Int(axes[node])
-            var delta = query[axis] - points[data_index * d + axis]
-            var near = Int(left[node])
-            var far = Int(right[node])
-            if delta > 0.0:
-                near = Int(right[node])
-                far = Int(left[node])
-            if far >= 0 and delta * delta <= radius2:
-                query_stack[stack_size] = Int64(far)
-                stack_size += 1
-            if near >= 0:
-                query_stack[stack_size] = Int64(near)
-                stack_size += 1
-        counts[q] = Int64(count)
-
-    if m >= PARALLEL_QUERY_THRESHOLD:
-        parallelize[process_query](m, min(m, PARALLEL_WORKERS))
-    else:
-        for q in range(m):
-            process_query(q)
+    kdtree_radius_rows(
+        points,
+        queries,
+        point_index,
+        axes,
+        left,
+        right,
+        stack,
+        counts,
+        radii,
+        offsets,
+        indices,
+        0,
+        m,
+        n,
+        d,
+        stack_stride,
+        write_indices,
+    )
 
 
 def cross(points: FPtr, a: Int, b: Int, c: Int) -> Float64:

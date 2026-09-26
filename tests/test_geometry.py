@@ -65,7 +65,7 @@ def test_delaunay_matches_scipy(seed, n):
     )
 
 
-def test_delaunay_parallel_metadata_matches_scipy():
+def test_delaunay_transform_metadata_matches_scipy():
     points = np.random.default_rng(332).random((600, 2))
     actual = spatial.Delaunay(points)
     expected = scipy_spatial.Delaunay(points)

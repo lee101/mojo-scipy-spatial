@@ -46,22 +46,22 @@ def test_query_empty_batch_and_negative_bound_do_not_cross_null_buffers():
     assert index == 1
 
 
-def test_query_simd_tail_and_parallel_threshold():
+def test_query_simd_tail_and_large_batch():
     rng = np.random.default_rng(330)
     points = rng.random((600, 11))
     queries = rng.random((300, 11))
     actual_tree = spatial.cKDTree(points)
     expected_tree = scipy_spatial.cKDTree(points)
 
-    serial = actual_tree.query(queries[:31], k=4)
-    expected_serial = expected_tree.query(queries[:31], k=4)
-    np.testing.assert_allclose(serial[0], expected_serial[0], rtol=2e-14)
-    np.testing.assert_array_equal(serial[1], expected_serial[1])
+    tail = actual_tree.query(queries[:31], k=4)
+    expected_tail = expected_tree.query(queries[:31], k=4)
+    np.testing.assert_allclose(tail[0], expected_tail[0], rtol=2e-14)
+    np.testing.assert_array_equal(tail[1], expected_tail[1])
 
-    parallel = actual_tree.query(queries, k=4)
-    expected_parallel = expected_tree.query(queries, k=4)
-    np.testing.assert_allclose(parallel[0], expected_parallel[0], rtol=2e-14)
-    np.testing.assert_array_equal(parallel[1], expected_parallel[1])
+    batch = actual_tree.query(queries, k=4)
+    expected_batch = expected_tree.query(queries, k=4)
+    np.testing.assert_allclose(batch[0], expected_batch[0], rtol=2e-14)
+    np.testing.assert_array_equal(batch[1], expected_batch[1])
 
 
 def test_distance_upper_bound_and_non_euclidean(point_cloud):
@@ -91,7 +91,7 @@ def test_query_ball_point_matches_scipy(point_cloud):
     )
 
 
-def test_query_ball_point_parallel_counts_and_compact_results():
+def test_query_ball_point_large_counts_and_compact_results():
     rng = np.random.default_rng(331)
     points = rng.random((700, 3))
     queries = rng.random((300, 3))
